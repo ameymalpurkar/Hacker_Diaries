@@ -1,8 +1,8 @@
-high|project
-low|oop
-high|amey|done
 high|kapade|done
-high|kapade|not done
-high|ranitai|not done
-high|hello|not done
-high|amey|not done
+high|kapade|done
+high|ranitai|done
+high|hello|done
+high|amey|done
+low|go|done
+high|go|not done
+high|come|not done

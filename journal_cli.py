@@ -13,11 +13,13 @@ console = Console()
 ACTIVATION_CODE = "secret"
 
 def add_entry():
-    entry_text = Prompt.ask("[bold cyan]What's on your mind?[/bold cyan]")
+    entries_input = Prompt.ask("[bold cyan]Enter your journal entries (comma separated for multiple)[/bold cyan]")
+    entries = [e.strip() for e in entries_input.split(',') if e.strip()]
     timestamp = datetime.now().strftime('%Y-%m-%d %H:%M')
     with open(JOURNAL_FILE, 'a', encoding='utf-8') as f:
-        f.write(f'{timestamp}|{entry_text}\n')
-    console.print(Panel.fit("[green]Entry added![/green]", title="Success", border_style="green"))
+        for entry_text in entries:
+            f.write(f'{timestamp}|{entry_text}\n')
+    console.print(Panel.fit(f"[green]{len(entries)} Entry(ies) added![/green]", title="Success", border_style="green"))
 
 def show_entries():
     if not os.path.exists(JOURNAL_FILE):
@@ -41,28 +43,28 @@ def delete_entry():
     if not os.path.exists(JOURNAL_FILE):
         console.print(Panel.fit("[red]No journal entries found.[/red]", title="Oops!", border_style="red"))
         return
-    table = Table(title="[bold green]Select Entry to Delete[/bold green]", show_lines=True, header_style="bold green", style="bold bright_green")
-    table.add_column("No.", style="bold bright_green", width=5)
-    table.add_column("Date", style="bold bright_green", width=18)
-    table.add_column("Entry", style="bold bright_green")
     with open(JOURNAL_FILE, 'r', encoding='utf-8') as f:
         lines = [line for line in f if '|' in line]
     if not lines:
         console.print(Panel.fit("[yellow]No journal entries yet.[/yellow]", title="Empty", border_style="yellow"))
         return
+    table = Table(title="[bold green]Select Entry(ies) to Delete[/bold green]", show_lines=True, header_style="bold green", style="bold bright_green")
+    table.add_column("No.", style="bold bright_green", width=5)
+    table.add_column("Date", style="bold bright_green", width=18)
+    table.add_column("Entry", style="bold bright_green")
     for idx, line in enumerate(lines, 1):
         date, entry = line.strip().split('|', 1)
         table.add_row(str(idx), date, entry)
     console.print(table)
+    choices = Prompt.ask("[bold bright_green]Enter entry numbers to delete (comma separated)[/bold bright_green]", default="1")
     try:
-        choice = int(Prompt.ask("[bold bright_green]Enter entry number to delete[/bold bright_green]", default="1"))
-        if 1 <= choice <= len(lines):
-            del lines[choice - 1]
-            with open(JOURNAL_FILE, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-            console.print(Panel.fit(f"[green]Entry #{choice} deleted![/green]", title="Deleted", border_style="green"))
-        else:
-            console.print(Panel.fit("[red]Invalid entry number.[/red]", title="Error", border_style="red"))
+        indices = sorted(set(int(i.strip()) for i in choices.split(',') if i.strip()), reverse=True)
+        for idx in indices:
+            if 1 <= idx <= len(lines):
+                del lines[idx - 1]
+        with open(JOURNAL_FILE, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        console.print(Panel.fit(f"[green]Deleted entries: {', '.join(map(str, indices))}![/green]", title="Deleted", border_style="green"))
     except ValueError:
         console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
 
@@ -97,42 +99,54 @@ def show_tasks():
         table.add_row(str(idx), priority, task, status)
     console.print(table)
 
-def mark_task_done():
-    if not os.path.exists(TASK_FILE):
-        console.print(Panel.fit("[red]No tasks found.[/red]", title="Oops!", border_style="red"))
-        return
-    show_tasks()
-    with open(TASK_FILE, 'r', encoding='utf-8') as f:
-        lines = [line for line in f if '|' in line]
-    try:
-        choice = int(Prompt.ask("[bold bright_green]Enter task number to mark as done[/bold bright_green]", default="1"))
-        if 1 <= choice <= len(lines):
-            priority, task, _ = lines[choice - 1].strip().split('|', 2)
-            lines[choice - 1] = f'{priority}|{task}|done\n'
-            with open(TASK_FILE, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-            console.print(Panel.fit(f"[green]Task #{choice} marked as done![/green]", title="Done", border_style="green"))
-        else:
-            console.print(Panel.fit("[red]Invalid task number.[/red]", title="Error", border_style="red"))
-    except ValueError:
-        console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
-
 def delete_task():
     if not os.path.exists(TASK_FILE):
         console.print(Panel.fit("[red]No tasks found.[/red]", title="Oops!", border_style="red"))
         return
     show_tasks()
     with open(TASK_FILE, 'r', encoding='utf-8') as f:
-        lines = [line for line in f if '|' in line]
+        lines = [line for line in f if line.count('|') == 2]
+    choices = Prompt.ask("[bold bright_green]Enter task numbers to delete (comma separated)[/bold bright_green]", default="1")
     try:
-        choice = int(Prompt.ask("[bold bright_green]Enter task number to delete[/bold bright_green]", default="1"))
-        if 1 <= choice <= len(lines):
-            del lines[choice - 1]
-            with open(TASK_FILE, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-            console.print(Panel.fit(f"[green]Task #{choice} deleted![/green]", title="Deleted", border_style="green"))
-        else:
-            console.print(Panel.fit("[red]Invalid task number.[/red]", title="Error", border_style="red"))
+        indices = sorted(set(int(i.strip()) for i in choices.split(',') if i.strip()), reverse=True)
+        for idx in indices:
+            if 1 <= idx <= len(lines):
+                del lines[idx - 1]
+        with open(TASK_FILE, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        console.print(Panel.fit(f"[green]Deleted tasks: {', '.join(map(str, indices))}![/green]", title="Deleted", border_style="green"))
+    except ValueError:
+        console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
+
+def mark_task_done():
+    if not os.path.exists(TASK_FILE):
+        console.print(Panel.fit("[red]No tasks found.[/red]", title="Oops!", border_style="red"))
+        return
+    with open(TASK_FILE, 'r', encoding='utf-8') as f:
+        lines = [line for line in f if line.count('|') == 2]
+    not_done_lines = [line for line in lines if line.strip().endswith('|not done')]
+    if not not_done_lines:
+        console.print(Panel.fit("[yellow]No incomplete tasks to mark as done.[/yellow]", title="All Done", border_style="yellow"))
+        return
+    table = Table(title="[bold bright_green]Mark Task(s) as Done[/bold bright_green]", show_lines=True, header_style="bold bright_green")
+    table.add_column("No.", style="bold bright_green", width=5)
+    table.add_column("Priority", style="bold yellow", width=10)
+    table.add_column("Task", style="white")
+    for idx, line in enumerate(not_done_lines, 1):
+        priority, task, status = line.strip().split('|', 2)
+        table.add_row(str(idx), priority, task)
+    console.print(table)
+    choices = Prompt.ask("[bold bright_green]Enter task numbers to mark as done (comma separated)[/bold bright_green]", default="1")
+    try:
+        indices = sorted(set(int(i.strip()) for i in choices.split(',') if i.strip()), reverse=True)
+        for idx in indices:
+            if 1 <= idx <= len(not_done_lines):
+                full_idx = lines.index(not_done_lines[idx - 1])
+                priority, task, _ = lines[full_idx].strip().split('|', 2)
+                lines[full_idx] = f'{priority}|{task}|done\n'
+        with open(TASK_FILE, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        console.print(Panel.fit(f"[green]Marked as done: {', '.join(map(str, indices))}![/green]", title="Done", border_style="green"))
     except ValueError:
         console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
 
@@ -142,18 +156,18 @@ def prioritise_task():
         return
     show_tasks()
     with open(TASK_FILE, 'r', encoding='utf-8') as f:
-        lines = [line for line in f if '|' in line]
+        lines = [line for line in f if line.count('|') == 2]
+    choices = Prompt.ask("[bold bright_green]Enter task numbers to prioritise (comma separated)[/bold bright_green]", default="1")
     try:
-        choice = int(Prompt.ask("[bold bright_green]Enter task number to prioritise[/bold bright_green]", default="1"))
-        if 1 <= choice <= len(lines):
-            _, task, status = lines[choice - 1].strip().split('|', 2)
-            new_priority = Prompt.ask("[bold yellow]New Priority (high/medium/low)[/bold yellow]", choices=["high", "medium", "low"], default="medium")
-            lines[choice - 1] = f'{new_priority}|{task}|{status}\n'
-            with open(TASK_FILE, 'w', encoding='utf-8') as f:
-                f.writelines(lines)
-            console.print(Panel.fit(f"[green]Task #{choice} priority updated to {new_priority}![/green]", title="Prioritised", border_style="green"))
-        else:
-            console.print(Panel.fit("[red]Invalid task number.[/red]", title="Error", border_style="red"))
+        indices = sorted(set(int(i.strip()) for i in choices.split(',') if i.strip()))
+        for idx in indices:
+            if 1 <= idx <= len(lines):
+                _, task, status = lines[idx - 1].strip().split('|', 2)
+                new_priority = Prompt.ask("[bold yellow]New Priority (high/medium/low)[/bold yellow]", choices=["high", "medium", "low"], default="medium")
+                lines[idx - 1] = f'{new_priority}|{task}|{status}\n'
+        with open(TASK_FILE, 'w', encoding='utf-8') as f:
+            f.writelines(lines)
+        console.print(Panel.fit(f"[green]Prioritised tasks: {', '.join(map(str, indices))}![/green]", title="Prioritised", border_style="green"))
     except ValueError:
         console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
 
