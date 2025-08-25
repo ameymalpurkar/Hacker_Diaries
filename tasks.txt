@@ -1,8 +1,8 @@
 high|kapade|done
-high|kapade|done
 high|ranitai|done
 high|hello|done
 high|amey|done
 low|go|done
 high|go|not done
 high|come|not done
+high|developing project|not done

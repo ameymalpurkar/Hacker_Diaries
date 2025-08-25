@@ -4,13 +4,207 @@ from rich.panel import Panel
 from rich.prompt import Prompt
 from datetime import datetime
 import os
+import json
 
 JOURNAL_FILE = 'journal.txt'
 TASK_FILE = 'tasks.txt'
+CONFIG_FILE = 'config.json'
 console = Console()
 
 # Special code word to activate the CLI
 ACTIVATION_CODE = "secret"
+
+# AI Configuration
+def load_config():
+    if os.path.exists(CONFIG_FILE):
+        with open(CONFIG_FILE, 'r') as f:
+            return json.load(f)
+    return {}
+
+def save_config(config):
+    with open(CONFIG_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+def setup_gemini_api():
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        console.print(Panel.fit("[red]Google Generative AI library not installed. Run: pip install google-generativeai[/red]", title="Missing Dependency", border_style="red"))
+        return False
+    
+    config = load_config()
+    api_key = config.get('gemini_api_key')
+    
+    if not api_key:
+        console.print(Panel("[bold yellow]First time using AI features![/bold yellow]\n[cyan]You need a Gemini API key from Google AI Studio[/cyan]\n[dim]Visit: https://makersuite.google.com/app/apikey[/dim]", title="AI Setup Required", border_style="yellow"))
+        api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
+        if not api_key:
+            console.print(Panel.fit("[red]API key required for AI features[/red]", border_style="red"))
+            return False
+        config['gemini_api_key'] = api_key
+        save_config(config)
+        console.print(Panel.fit("[green]API key saved successfully![/green]", title="Setup Complete", border_style="green"))
+    
+    try:
+        genai.configure(api_key=api_key)
+        # Test the API key
+        model = genai.GenerativeModel("gemini-pro")
+        test_response = model.generate_content("Hello")
+        return True
+    except Exception as e:
+        console.print(Panel.fit(f"[red]Invalid API key or connection error: {str(e)}[/red]", title="API Error", border_style="red"))
+        # Remove invalid key
+        config.pop('gemini_api_key', None)
+        save_config(config)
+        return False
+
+def ai_task_analysis():
+    if not setup_gemini_api():
+        return
+    
+    import google.generativeai as genai
+    
+    if not os.path.exists(TASK_FILE):
+        console.print(Panel.fit("[red]No tasks found to analyze.[/red]", title="No Tasks", border_style="red"))
+        return
+    
+    with open(TASK_FILE, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if line.count('|') == 2]
+    
+    if not lines:
+        console.print(Panel.fit("[yellow]No tasks to analyze.[/yellow]", title="Empty", border_style="yellow"))
+        return
+    
+    # Prepare task data for AI
+    tasks_text = ""
+    for i, line in enumerate(lines, 1):
+        priority, task, status = line.split('|', 2)
+        tasks_text += f"{i}. [{priority.upper()}] {task} - {status}\n"
+    
+    prompt = f"""Analyze these tasks and provide insights:
+
+{tasks_text}
+
+Please provide:
+1. Task summary and overview
+2. Priority recommendations
+3. Time management suggestions
+4. Productivity insights
+5. Next action recommendations
+
+Keep the response concise and actionable."""
+
+    try:
+        config = load_config()
+        genai.configure(api_key=config['gemini_api_key'])
+        model = genai.GenerativeModel("gemini-pro")
+        
+        console.print(Panel("[bold yellow]🤖 AI is analyzing your tasks...[/bold yellow]", border_style="yellow"))
+        
+        response = model.generate_content(prompt)
+        ai_response = response.text if hasattr(response, 'text') else str(response)
+        
+        console.print(Panel(f"[bold cyan]🧠 AI Task Analysis:[/bold cyan]\n\n{ai_response}", title="Gemini AI Insights", border_style="cyan"))
+        
+    except Exception as e:
+        console.print(Panel.fit(f"[red]AI analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
+
+def ai_suggest_tasks():
+    if not setup_gemini_api():
+        return
+        
+    import google.generativeai as genai
+    
+    # Get current tasks for context
+    current_tasks = ""
+    if os.path.exists(TASK_FILE):
+        with open(TASK_FILE, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f if line.count('|') == 2]
+            for line in lines:
+                priority, task, status = line.split('|', 2)
+                current_tasks += f"- {task} ({status})\n"
+    
+    user_goal = Prompt.ask("[bold cyan]What are you trying to accomplish? (e.g., 'prepare for presentation', 'organize workspace')[/bold cyan]")
+    
+    prompt = f"""Based on this goal: "{user_goal}"
+
+Current tasks:
+{current_tasks if current_tasks else "No current tasks"}
+
+Suggest 3-5 specific, actionable tasks that would help achieve this goal. Format each as:
+- [Priority: high/medium/low] Task description
+
+Keep tasks realistic and achievable."""
+
+    try:
+        config = load_config()
+        genai.configure(api_key=config['gemini_api_key'])
+        model = genai.GenerativeModel("gemini-pro")
+        
+        console.print(Panel("[bold yellow]🤖 AI is generating task suggestions...[/bold yellow]", border_style="yellow"))
+        
+        response = model.generate_content(prompt)
+        ai_response = response.text if hasattr(response, 'text') else str(response)
+        
+        console.print(Panel(f"[bold cyan]💡 AI Task Suggestions:[/bold cyan]\n\n{ai_response}", title="Gemini AI Suggestions", border_style="cyan"))
+        
+        # Ask if user wants to add these tasks
+        if Prompt.ask("[bold green]Would you like to add any of these suggestions as tasks? (y/n)[/bold green]", choices=["y", "n"], default="n") == "y":
+            add_ai_suggested_tasks(ai_response)
+            
+    except Exception as e:
+        console.print(Panel.fit(f"[red]AI suggestion failed: {str(e)}[/red]", title="Error", border_style="red"))
+
+def add_ai_suggested_tasks(ai_suggestions):
+    console.print(Panel("[bold cyan]Copy and paste the tasks you want to add (one per line, include priority):[/bold cyan]", border_style="cyan"))
+    console.print("[dim]Example: high|Complete project proposal[/dim]")
+    
+    while True:
+        task_input = Prompt.ask("[bold green]Enter task (priority|description) or 'done' to finish[/bold green]")
+        if task_input.lower() == 'done':
+            break
+            
+        if '|' in task_input:
+            try:
+                priority, task_desc = task_input.split('|', 1)
+                priority = priority.strip().lower()
+                task_desc = task_desc.strip()
+                
+                if priority in ['high', 'medium', 'low']:
+                    with open(TASK_FILE, 'a', encoding='utf-8') as f:
+                        f.write(f'{priority}|{task_desc}|not done\n')
+                    console.print(Panel.fit(f"[green]Added: {task_desc} [{priority}][/green]", border_style="green"))
+                else:
+                    console.print(Panel.fit("[red]Priority must be high, medium, or low[/red]", border_style="red"))
+            except:
+                console.print(Panel.fit("[red]Format: priority|task description[/red]", border_style="red"))
+        else:
+            console.print(Panel.fit("[red]Format: priority|task description[/red]", border_style="red"))
+
+def ai_menu():
+    console.print(Panel("[bold magenta]🤖 AI Assistant Menu[/bold magenta]", border_style="magenta"))
+    while True:
+        choice = Prompt.ask(
+            "[bold bright_green]AI Options: analyze, suggest, config, back[/bold bright_green]", 
+            choices=["analyze", "suggest", "config", "back"], 
+            default="analyze"
+        )
+        
+        if choice == "analyze":
+            ai_task_analysis()
+        elif choice == "suggest":
+            ai_suggest_tasks()
+        elif choice == "config":
+            config = load_config()
+            if config.get('gemini_api_key'):
+                if Prompt.ask("[bold yellow]Reset API key? (y/n)[/bold yellow]", choices=["y", "n"], default="n") == "y":
+                    config.pop('gemini_api_key', None)
+                    save_config(config)
+                    console.print(Panel.fit("[green]API key reset. You'll be prompted to enter it again.[/green]", border_style="green"))
+            else:
+                console.print(Panel.fit("[yellow]No API key configured yet.[/yellow]", border_style="yellow"))
+        elif choice == "back":
+            break
 
 def add_entry():
     entries_input = Prompt.ask("[bold cyan]Enter your journal entries (comma separated for multiple)[/bold cyan]")
@@ -172,6 +366,14 @@ def prioritise_task():
         console.print(Panel.fit("[red]Invalid input.[/red]", title="Error", border_style="red"))
 
 def task_manager():
+    # Ask if user wants AI assistance
+    use_ai = Prompt.ask("[bold magenta]🤖 Use AI assistance for task management? (y/n)[/bold magenta]", choices=["y", "n"], default="n")
+    
+    if use_ai == "y":
+        ai_menu()
+        return
+    
+    # Manual task management
     while True:
         action = Prompt.ask("[bold bright_green]Task Manager: add, show, delete, prioritise, done, back[/bold bright_green]", choices=["add", "show", "delete", "prioritise", "done", "back"], default="show")
         if action == "add":
@@ -208,7 +410,7 @@ def main():
             command = sys.argv[2].lower()
             sys.argv = sys.argv[:2]  # Remove the command so it doesn't repeat
         else:
-            command = Prompt.ask("[bold bright_green]Enter command (add, show, delete, exit, 404 to quit)[/bold bright_green]", default="show").lower()
+            command = Prompt.ask("[bold bright_green]Enter command (add, show, delete, task, ai, exit, 404 to quit)[/bold bright_green]", default="show").lower()
         if command == "add":
             add_entry()
         elif command == "show":
@@ -222,6 +424,8 @@ def main():
             break
         elif command == "task":
             task_manager()
+        elif command == "ai":
+            ai_menu()
         else:
             console.print(Panel(f"[red]Unknown command: {command}[/red]", border_style="red"))
 
