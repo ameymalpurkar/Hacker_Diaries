@@ -48,7 +48,7 @@ def setup_gemini_api():
     try:
         genai.configure(api_key=api_key)
         # Test the API key
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         test_response = model.generate_content("Hello")
         return True
     except Exception as e:
@@ -97,7 +97,7 @@ Keep the response concise and actionable."""
     try:
         config = load_config()
         genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         console.print(Panel("[bold yellow]🤖 AI is analyzing your tasks...[/bold yellow]", border_style="yellow"))
         
@@ -139,7 +139,7 @@ Keep tasks realistic and achievable."""
     try:
         config = load_config()
         genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-pro")
+        model = genai.GenerativeModel("gemini-1.5-flash")
         
         console.print(Panel("[bold yellow]🤖 AI is generating task suggestions...[/bold yellow]", border_style="yellow"))
         
@@ -181,19 +181,218 @@ def add_ai_suggested_tasks(ai_suggestions):
         else:
             console.print(Panel.fit("[red]Format: priority|task description[/red]", border_style="red"))
 
-def ai_menu():
-    console.print(Panel("[bold magenta]🤖 AI Assistant Menu[/bold magenta]", border_style="magenta"))
+def ai_journal_analysis():
+    """Analyze journal entries for insights, patterns, and mood"""
+    if not setup_gemini_api():
+        return
+    
+    import google.generativeai as genai
+    
+    if not os.path.exists(JOURNAL_FILE):
+        console.print(Panel.fit("[red]No journal entries found to analyze.[/red]", title="No Entries", border_style="red"))
+        return
+    
+    with open(JOURNAL_FILE, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if '|' in line]
+    
+    if not lines:
+        console.print(Panel.fit("[yellow]No journal entries to analyze.[/yellow]", title="Empty", border_style="yellow"))
+        return
+    
+    # Prepare journal data for AI
+    journal_text = ""
+    entry_count = 0
+    for line in lines:
+        if '|' in line:
+            date, entry = line.split('|', 1)
+            journal_text += f"[{date}] {entry}\n"
+            entry_count += 1
+    
+    # Limit analysis to recent entries if too many
+    if entry_count > 20:
+        lines = lines[-20:]  # Last 20 entries
+        journal_text = ""
+        for line in lines:
+            date, entry = line.split('|', 1)
+            journal_text += f"[{date}] {entry}\n"
+        console.print(f"[dim]Analyzing your last 20 journal entries...[/dim]")
+    
+    prompt = f"""Analyze these journal entries and provide thoughtful insights:
+
+{journal_text}
+
+Please provide:
+1. **Mood & Emotional Patterns**: What emotions and moods do you notice?
+2. **Key Themes**: What topics or concerns appear frequently?
+3. **Personal Growth**: Any signs of progress, learning, or development?
+4. **Stress Indicators**: Any signs of stress, anxiety, or challenges?
+5. **Positive Highlights**: What positive moments or achievements stand out?
+6. **Reflection Questions**: 2-3 thoughtful questions for self-reflection
+7. **Gentle Suggestions**: Supportive recommendations for wellbeing
+
+Be empathetic, supportive, and insightful. Focus on patterns and growth opportunities."""
+
+    try:
+        config = load_config()
+        genai.configure(api_key=config['gemini_api_key'])
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        console.print(Panel("[bold yellow]🤖 AI is analyzing your journal entries...[/bold yellow]", border_style="yellow"))
+        
+        response = model.generate_content(prompt)
+        ai_response = response.text if hasattr(response, 'text') else str(response)
+        
+        console.print(Panel(f"[bold cyan]📝 AI Journal Analysis:[/bold cyan]\n\n{ai_response}", title="Personal Insights", border_style="cyan"))
+        
+    except Exception as e:
+        console.print(Panel.fit(f"[red]AI analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
+
+def ai_journal_mood_tracker():
+    """Track mood trends over time"""
+    if not setup_gemini_api():
+        return
+    
+    import google.generativeai as genai
+    
+    if not os.path.exists(JOURNAL_FILE):
+        console.print(Panel.fit("[red]No journal entries found.[/red]", title="No Entries", border_style="red"))
+        return
+    
+    with open(JOURNAL_FILE, 'r', encoding='utf-8') as f:
+        lines = [line.strip() for line in f if '|' in line]
+    
+    if not lines:
+        console.print(Panel.fit("[yellow]No journal entries to analyze.[/yellow]", title="Empty", border_style="yellow"))
+        return
+    
+    # Get recent entries for mood tracking
+    recent_entries = lines[-10:] if len(lines) > 10 else lines
+    journal_text = ""
+    for line in recent_entries:
+        if '|' in line:
+            date, entry = line.split('|', 1)
+            journal_text += f"[{date}] {entry}\n"
+    
+    prompt = f"""Analyze the mood and emotional tone in these journal entries:
+
+{journal_text}
+
+Please provide:
+1. **Overall Mood Trend**: Is the general mood positive, neutral, or concerning?
+2. **Emotional Range**: What range of emotions are expressed?
+3. **Mood Patterns**: Any patterns related to time, events, or circumstances?
+4. **Energy Levels**: Signs of high/low energy or motivation?
+5. **Mood Score**: Rate overall wellbeing from 1-10 with explanation
+6. **Recommendations**: Gentle suggestions to support emotional wellbeing
+
+Be supportive and focus on emotional health insights."""
+
+    try:
+        config = load_config()
+        genai.configure(api_key=config['gemini_api_key'])
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        console.print(Panel("[bold yellow]🤖 AI is tracking your mood patterns...[/bold yellow]", border_style="yellow"))
+        
+        response = model.generate_content(prompt)
+        ai_response = response.text if hasattr(response, 'text') else str(response)
+        
+        console.print(Panel(f"[bold magenta]💭 Mood Analysis:[/bold magenta]\n\n{ai_response}", title="Emotional Insights", border_style="magenta"))
+        
+    except Exception as e:
+        console.print(Panel.fit(f"[red]Mood analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
+
+def ai_journal_suggestions():
+    """Get AI suggestions for journaling prompts and self-reflection"""
+    if not setup_gemini_api():
+        return
+    
+    import google.generativeai as genai
+    
+    # Get context from recent entries if they exist
+    context = ""
+    if os.path.exists(JOURNAL_FILE):
+        with open(JOURNAL_FILE, 'r', encoding='utf-8') as f:
+            lines = [line.strip() for line in f if '|' in line]
+            if lines:
+                recent_entries = lines[-5:]  # Last 5 entries for context
+                for line in recent_entries:
+                    if '|' in line:
+                        date, entry = line.split('|', 1)
+                        context += f"[{date}] {entry}\n"
+    
+    current_focus = Prompt.ask("[bold cyan]What would you like to focus on? (e.g., 'gratitude', 'goals', 'relationships', 'stress')[/bold cyan]", default="general reflection")
+    
+    prompt = f"""Based on this focus area: "{current_focus}"
+
+Recent journal context:
+{context if context else "No recent entries"}
+
+Please provide:
+1. **5 Thoughtful Journal Prompts** related to the focus area
+2. **Self-Reflection Questions** for deeper thinking
+3. **Mindfulness Suggestions** for present-moment awareness
+4. **Growth Opportunities** to explore
+5. **Gratitude Prompts** to appreciate positive aspects
+
+Make the suggestions personal, meaningful, and encouraging for self-discovery."""
+
+    try:
+        config = load_config()
+        genai.configure(api_key=config['gemini_api_key'])
+        model = genai.GenerativeModel("gemini-1.5-flash")
+        
+        console.print(Panel("[bold yellow]🤖 AI is creating personalized journal prompts...[/bold yellow]", border_style="yellow"))
+        
+        response = model.generate_content(prompt)
+        ai_response = response.text if hasattr(response, 'text') else str(response)
+        
+        console.print(Panel(f"[bold green]✨ Journal Suggestions:[/bold green]\n\n{ai_response}", title="Writing Prompts", border_style="green"))
+        
+    except Exception as e:
+        console.print(Panel.fit(f"[red]Suggestion generation failed: {str(e)}[/red]", title="Error", border_style="red"))
+
+def journal_ai_menu():
+    """AI menu specifically for journal analysis"""
+    console.print(Panel("[bold cyan]📝 AI Journal Assistant[/bold cyan]", border_style="cyan"))
     while True:
         choice = Prompt.ask(
-            "[bold bright_green]AI Options: analyze, suggest, config, back[/bold bright_green]", 
-            choices=["analyze", "suggest", "config", "back"], 
+            "[bold cyan]Journal AI: analyze, mood, prompts, back[/bold cyan]", 
+            choices=["analyze", "mood", "prompts", "back"], 
             default="analyze"
         )
         
         if choice == "analyze":
-            ai_task_analysis()
-        elif choice == "suggest":
-            ai_suggest_tasks()
+            ai_journal_analysis()
+        elif choice == "mood":
+            ai_journal_mood_tracker()
+        elif choice == "prompts":
+            ai_journal_suggestions()
+        elif choice == "back":
+            break
+
+def ai_menu():
+    console.print(Panel("[bold magenta]🤖 AI Assistant Menu[/bold magenta]", border_style="magenta"))
+    while True:
+        choice = Prompt.ask(
+            "[bold bright_green]AI Options: tasks, journal, config, back[/bold bright_green]", 
+            choices=["tasks", "journal", "config", "back"], 
+            default="tasks"
+        )
+        
+        if choice == "tasks":
+            # Task-focused AI submenu
+            task_choice = Prompt.ask(
+                "[bold yellow]Task AI: analyze, suggest, back[/bold yellow]", 
+                choices=["analyze", "suggest", "back"], 
+                default="analyze"
+            )
+            if task_choice == "analyze":
+                ai_task_analysis()
+            elif task_choice == "suggest":
+                ai_suggest_tasks()
+        elif choice == "journal":
+            journal_ai_menu()
         elif choice == "config":
             config = load_config()
             if config.get('gemini_api_key'):
@@ -389,6 +588,77 @@ def task_manager():
         elif action == "back":
             break
 
+def config_menu():
+    """Direct access to configuration options"""
+    console.print(Panel("[bold cyan]⚙️ Configuration Menu[/bold cyan]", border_style="cyan"))
+    while True:
+        choice = Prompt.ask(
+            "[bold cyan]Config Options: api, file, reset, view, back[/bold cyan]", 
+            choices=["api", "file", "reset", "view", "back"], 
+            default="api"
+        )
+        
+        if choice == "api":
+            console.print(Panel("[bold yellow]Setting up Gemini AI API Key[/bold yellow]", border_style="yellow"))
+            console.print("[cyan]Get your API key from: https://makersuite.google.com/app/apikey[/cyan]")
+            console.print("[dim]Tip: Use Ctrl+V to paste your API key[/dim]")
+            use_password = Prompt.ask("[bold cyan]Hide API key while typing? (y/n)[/bold cyan]", choices=["y", "n"], default="n")
+            if use_password == "y":
+                console.print("[dim]Note: Password mode may not allow pasting in some terminals[/dim]")
+                api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
+            else:
+                api_key = Prompt.ask("[bold cyan]Enter your Gemini API key (paste with Ctrl+V)[/bold cyan]")
+            if api_key and api_key.strip():
+                config = load_config()
+                config['gemini_api_key'] = api_key.strip()
+                save_config(config)
+                console.print(Panel.fit("[green]API key saved successfully![/green]", title="Success", border_style="green"))
+            else:
+                console.print(Panel.fit("[red]No API key entered[/red]", border_style="red"))
+        elif choice == "file":
+            console.print(Panel("[bold yellow]Load API Key from File[/bold yellow]", border_style="yellow"))
+            console.print("[cyan]1. Create a text file named 'api_key.txt' in this directory[/cyan]")
+            console.print("[cyan]2. Paste your API key into that file and save it[/cyan]")
+            console.print("[cyan]3. Press Enter to load it[/cyan]")
+            Prompt.ask("[dim]Press Enter when ready...[/dim]", default="")
+            
+            api_key_file = "api_key.txt"
+            if os.path.exists(api_key_file):
+                try:
+                    with open(api_key_file, 'r', encoding='utf-8') as f:
+                        api_key = f.read().strip()
+                    if api_key:
+                        config = load_config()
+                        config['gemini_api_key'] = api_key
+                        save_config(config)
+                        # Delete the file for security
+                        os.remove(api_key_file)
+                        console.print(Panel.fit("[green]API key loaded and file deleted for security![/green]", title="Success", border_style="green"))
+                    else:
+                        console.print(Panel.fit("[red]API key file is empty[/red]", border_style="red"))
+                except Exception as e:
+                    console.print(Panel.fit(f"[red]Error reading file: {str(e)}[/red]", border_style="red"))
+            else:
+                console.print(Panel.fit("[red]File 'api_key.txt' not found[/red]", border_style="red"))
+        elif choice == "reset":
+            config = load_config()
+            if config.get('gemini_api_key'):
+                if Prompt.ask("[bold yellow]Reset API key? (y/n)[/bold yellow]", choices=["y", "n"], default="n") == "y":
+                    config.pop('gemini_api_key', None)
+                    save_config(config)
+                    console.print(Panel.fit("[green]API key reset successfully![/green]", border_style="green"))
+            else:
+                console.print(Panel.fit("[yellow]No API key configured yet.[/yellow]", border_style="yellow"))
+        elif choice == "view":
+            config = load_config()
+            if config.get('gemini_api_key'):
+                masked_key = config['gemini_api_key'][:8] + "..." + config['gemini_api_key'][-4:] if len(config['gemini_api_key']) > 12 else "***"
+                console.print(Panel.fit(f"[green]API Key: {masked_key}[/green]", title="Current Configuration", border_style="green"))
+            else:
+                console.print(Panel.fit("[yellow]No API key configured[/yellow]", title="Current Configuration", border_style="yellow"))
+        elif choice == "back":
+            break
+
 def main():
     import sys
     hacker_banner = """
@@ -410,7 +680,7 @@ def main():
             command = sys.argv[2].lower()
             sys.argv = sys.argv[:2]  # Remove the command so it doesn't repeat
         else:
-            command = Prompt.ask("[bold bright_green]Enter command (add, show, delete, task, ai, exit, 404 to quit)[/bold bright_green]", default="show").lower()
+            command = Prompt.ask("[bold bright_green]Enter command (add, show, delete, task, ai, journal-ai, config, exit, 404 to quit)[/bold bright_green]", default="show").lower()
         if command == "add":
             add_entry()
         elif command == "show":
@@ -426,6 +696,10 @@ def main():
             task_manager()
         elif command == "ai":
             ai_menu()
+        elif command == "journal-ai":
+            journal_ai_menu()
+        elif command == "config":
+            config_menu()
         else:
             console.print(Panel(f"[red]Unknown command: {command}[/red]", border_style="red"))
 
