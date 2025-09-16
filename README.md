@@ -1,6 +1,6 @@
 # 🖥️ Hacker Diaries - AI-Powered Journal CLI
 
-Hacker Diaries is a fast, clean command‑line journaling app with optional AI insights. Write quickly, review clearly, and get gentle guidance powered by Gemini when you want it.
+Transform your thoughts into powerful insights with Hacker Diaries – the intelligent CLI journaling companion that makes reflection effortless and meaningful. Capture your daily experiences, track your mood patterns, and unlock deeper self-awareness through AI-powered analysis. Whether you're documenting your coding journey, managing tasks, or exploring personal growth, this beautiful terminal-based app turns every entry into an opportunity for discovery. Powered by Google's Gemini AI, it offers personalized prompts, emotional insights, and productivity recommendations that evolve with your unique story. Simple to use, powerful to experience – because every hacker's journey deserves to be remembered and understood.
 
 ---
 
