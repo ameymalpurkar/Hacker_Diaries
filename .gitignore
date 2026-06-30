@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+.venv/
+venv/
+*.pyc
+
+# Local secrets and config
+config.json
+api_key.txt
+.env
+
+# MacOS
+.DS_Store

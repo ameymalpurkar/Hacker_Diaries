@@ -5,6 +5,7 @@ from rich.prompt import Prompt
 from datetime import datetime
 import os
 import json
+import requests
 
 JOURNAL_FILE = 'journal.txt'
 TASK_FILE = 'tasks.txt'
@@ -25,44 +26,138 @@ def save_config(config):
     with open(CONFIG_FILE, 'w') as f:
         json.dump(config, f, indent=2)
 
-def setup_gemini_api():
-    try:
-        import google.generativeai as genai
-    except ImportError:
-        console.print(Panel.fit("[red]Google Generative AI library not installed. Run: pip install google-generativeai[/red]", title="Missing Dependency", border_style="red"))
-        return False
-    
+def setup_ai_api():
     config = load_config()
-    api_key = config.get('gemini_api_key')
+    provider = config.get('api_provider', 'gemini')
     
-    if not api_key:
-        console.print(Panel("[bold yellow]First time using AI features![/bold yellow]\n[cyan]You need a Gemini API key from Google AI Studio[/cyan]\n[dim]Visit: https://makersuite.google.com/app/apikey[/dim]", title="AI Setup Required", border_style="yellow"))
-        api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
-        if not api_key:
-            console.print(Panel.fit("[red]API key required for AI features[/red]", border_style="red"))
+    if provider == 'gemini':
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            console.print(Panel.fit("[red]Google Generative AI library not installed. Run: pip install google-generativeai[/red]", title="Missing Dependency", border_style="red"))
             return False
-        config['gemini_api_key'] = api_key
-        save_config(config)
-        console.print(Panel.fit("[green]API key saved successfully![/green]", title="Setup Complete", border_style="green"))
-    
-    try:
-        genai.configure(api_key=api_key)
-        # Test the API key
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        test_response = model.generate_content("Hello")
-        return True
-    except Exception as e:
-        console.print(Panel.fit(f"[red]Invalid API key or connection error: {str(e)}[/red]", title="API Error", border_style="red"))
-        # Remove invalid key
-        config.pop('gemini_api_key', None)
-        save_config(config)
+        
+        api_key = os.getenv('GEMINI_API_KEY') or config.get('gemini_api_key')
+        
+        if not api_key:
+            console.print(Panel("[bold yellow]First time using AI features![/bold yellow]\n[cyan]You need a Gemini API key from Google AI Studio[/cyan]\n[dim]Visit: https://makersuite.google.com/app/apikey[/dim]", title="AI Setup Required", border_style="yellow"))
+            api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
+            if not api_key:
+                console.print(Panel.fit("[red]API key required for AI features[/red]", border_style="red"))
+                return False
+            config['gemini_api_key'] = api_key
+            save_config(config)
+            console.print(Panel.fit("[green]API key saved successfully![/green]", title="Setup Complete", border_style="green"))
+        
+        try:
+            genai.configure(api_key=api_key)
+            # Test the API key
+            model = genai.GenerativeModel("gemini-3.5-flash")
+            test_response = model.generate_content("Hello")
+            return True
+        except Exception as e:
+            console.print(Panel.fit(f"[red]Connection error or invalid API key: {str(e)}[/red]", title="API Error", border_style="red"))
+            return False
+            
+    elif provider == 'openrouter':
+        api_key = os.getenv('OPENROUTER_API_KEY') or config.get('openrouter_api_key')
+        model_name = config.get('openrouter_model', 'anthropic/claude-sonnet-4')
+        
+        if not api_key:
+            console.print(Panel("[bold yellow]First time using OpenRouter AI features![/bold yellow]\n[cyan]You need an OpenRouter API key[/cyan]\n[dim]Visit: https://openrouter.ai/keys[/dim]", title="OpenRouter Setup Required", border_style="yellow"))
+            api_key = Prompt.ask("[bold cyan]Enter your OpenRouter API key[/bold cyan]", password=True)
+            if not api_key:
+                console.print(Panel.fit("[red]API key required for OpenRouter features[/red]", border_style="red"))
+                return False
+            config['openrouter_api_key'] = api_key
+            save_config(config)
+            console.print(Panel.fit("[green]OpenRouter API key saved successfully![/green]", title="Setup Complete", border_style="green"))
+            
+        try:
+            headers = {
+                "Authorization": f"Bearer {api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://github.com/ameymalpurkar/Hacker_Diaries",
+                "X-Title": "Hacker Diaries",
+            }
+            data = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": "Hello"}],
+                "max_tokens": 500
+            }
+            console.print(Panel("[bold yellow]🤖 Testing OpenRouter connection...[/bold yellow]", border_style="yellow"))
+            response = requests.post(
+                url="https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                data=json.dumps(data),
+                timeout=15
+            )
+            if response.status_code == 200:
+                return True
+            else:
+                console.print(Panel.fit(f"[red]OpenRouter API Error: Status {response.status_code}\n{response.text}[/red]", title="API Error", border_style="red"))
+                return False
+        except Exception as e:
+            console.print(Panel.fit(f"[red]Connection error: {str(e)}[/red]", title="API Error", border_style="red"))
+            return False
+    else:
+        console.print(Panel.fit(f"[red]Unknown API provider: {provider}[/red]", border_style="red"))
         return False
+
+def setup_gemini_api():
+    return setup_ai_api()
+
+def generate_ai_content(prompt):
+    config = load_config()
+    provider = config.get('api_provider', 'gemini')
+    
+    if provider == 'gemini':
+        import google.generativeai as genai
+        genai.configure(api_key=os.getenv('GEMINI_API_KEY') or config.get('gemini_api_key'))
+        model = genai.GenerativeModel("gemini-3.5-flash")
+        response = model.generate_content(prompt)
+        return response.text if hasattr(response, 'text') else str(response)
+        
+    elif provider == 'openrouter':
+        api_key = os.getenv('OPENROUTER_API_KEY') or config.get('openrouter_api_key')
+        model_name = config.get('openrouter_model', 'anthropic/claude-sonnet-4')
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://github.com/ameymalpurkar/Hacker_Diaries",
+            "X-Title": "Hacker Diaries",
+        }
+        
+        data = {
+            "model": model_name,
+            "messages": [
+                {"role": "user", "content": prompt}
+            ],
+            "max_tokens": 1500
+        }
+        
+        response = requests.post(
+            url="https://openrouter.ai/api/v1/chat/completions",
+            headers=headers,
+            data=json.dumps(data),
+            timeout=30
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            try:
+                return result['choices'][0]['message']['content']
+            except (KeyError, IndexError):
+                raise Exception(f"Unexpected response structure from OpenRouter: {json.dumps(result)}")
+        else:
+            raise Exception(f"OpenRouter API error (Status {response.status_code}): {response.text}")
+    else:
+        raise Exception(f"Unknown API provider: {provider}")
 
 def ai_task_analysis():
     if not setup_gemini_api():
         return
-    
-    import google.generativeai as genai
     
     if not os.path.exists(TASK_FILE):
         console.print(Panel.fit("[red]No tasks found to analyze.[/red]", title="No Tasks", border_style="red"))
@@ -95,25 +190,15 @@ Please provide:
 Keep the response concise and actionable."""
 
     try:
-        config = load_config()
-        genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         console.print(Panel("[bold yellow]🤖 AI is analyzing your tasks...[/bold yellow]", border_style="yellow"))
-        
-        response = model.generate_content(prompt)
-        ai_response = response.text if hasattr(response, 'text') else str(response)
-        
-        console.print(Panel(f"[bold cyan]🧠 AI Task Analysis:[/bold cyan]\n\n{ai_response}", title="Gemini AI Insights", border_style="cyan"))
-        
+        ai_response = generate_ai_content(prompt)
+        console.print(Panel(f"[bold cyan]🧠 AI Task Analysis:[/bold cyan]\n\n{ai_response}", title="AI Insights", border_style="cyan"))
     except Exception as e:
         console.print(Panel.fit(f"[red]AI analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
 
 def ai_suggest_tasks():
     if not setup_gemini_api():
         return
-        
-    import google.generativeai as genai
     
     # Get current tasks for context
     current_tasks = ""
@@ -137,16 +222,9 @@ Suggest 3-5 specific, actionable tasks that would help achieve this goal. Format
 Keep tasks realistic and achievable."""
 
     try:
-        config = load_config()
-        genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         console.print(Panel("[bold yellow]🤖 AI is generating task suggestions...[/bold yellow]", border_style="yellow"))
-        
-        response = model.generate_content(prompt)
-        ai_response = response.text if hasattr(response, 'text') else str(response)
-        
-        console.print(Panel(f"[bold cyan]💡 AI Task Suggestions:[/bold cyan]\n\n{ai_response}", title="Gemini AI Suggestions", border_style="cyan"))
+        ai_response = generate_ai_content(prompt)
+        console.print(Panel(f"[bold cyan]💡 AI Task Suggestions:[/bold cyan]\n\n{ai_response}", title="AI Suggestions", border_style="cyan"))
         
         # Ask if user wants to add these tasks
         if Prompt.ask("[bold green]Would you like to add any of these suggestions as tasks? (y/n)[/bold green]", choices=["y", "n"], default="n") == "y":
@@ -185,8 +263,6 @@ def ai_journal_analysis():
     """Analyze journal entries for insights, patterns, and mood"""
     if not setup_gemini_api():
         return
-    
-    import google.generativeai as genai
     
     if not os.path.exists(JOURNAL_FILE):
         console.print(Panel.fit("[red]No journal entries found to analyze.[/red]", title="No Entries", border_style="red"))
@@ -233,17 +309,9 @@ Please provide:
 Be empathetic, supportive, and insightful. Focus on patterns and growth opportunities."""
 
     try:
-        config = load_config()
-        genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         console.print(Panel("[bold yellow]🤖 AI is analyzing your journal entries...[/bold yellow]", border_style="yellow"))
-        
-        response = model.generate_content(prompt)
-        ai_response = response.text if hasattr(response, 'text') else str(response)
-        
+        ai_response = generate_ai_content(prompt)
         console.print(Panel(f"[bold cyan]📝 AI Journal Analysis:[/bold cyan]\n\n{ai_response}", title="Personal Insights", border_style="cyan"))
-        
     except Exception as e:
         console.print(Panel.fit(f"[red]AI analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
 
@@ -251,8 +319,6 @@ def ai_journal_mood_tracker():
     """Track mood trends over time"""
     if not setup_gemini_api():
         return
-    
-    import google.generativeai as genai
     
     if not os.path.exists(JOURNAL_FILE):
         console.print(Panel.fit("[red]No journal entries found.[/red]", title="No Entries", border_style="red"))
@@ -288,17 +354,9 @@ Please provide:
 Be supportive and focus on emotional health insights."""
 
     try:
-        config = load_config()
-        genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         console.print(Panel("[bold yellow]🤖 AI is tracking your mood patterns...[/bold yellow]", border_style="yellow"))
-        
-        response = model.generate_content(prompt)
-        ai_response = response.text if hasattr(response, 'text') else str(response)
-        
+        ai_response = generate_ai_content(prompt)
         console.print(Panel(f"[bold magenta]💭 Mood Analysis:[/bold magenta]\n\n{ai_response}", title="Emotional Insights", border_style="magenta"))
-        
     except Exception as e:
         console.print(Panel.fit(f"[red]Mood analysis failed: {str(e)}[/red]", title="Error", border_style="red"))
 
@@ -306,8 +364,6 @@ def ai_journal_suggestions():
     """Get AI suggestions for journaling prompts and self-reflection"""
     if not setup_gemini_api():
         return
-    
-    import google.generativeai as genai
     
     # Get context from recent entries if they exist
     context = ""
@@ -338,17 +394,9 @@ Please provide:
 Make the suggestions personal, meaningful, and encouraging for self-discovery."""
 
     try:
-        config = load_config()
-        genai.configure(api_key=config['gemini_api_key'])
-        model = genai.GenerativeModel("gemini-1.5-flash")
-        
         console.print(Panel("[bold yellow]🤖 AI is creating personalized journal prompts...[/bold yellow]", border_style="yellow"))
-        
-        response = model.generate_content(prompt)
-        ai_response = response.text if hasattr(response, 'text') else str(response)
-        
+        ai_response = generate_ai_content(prompt)
         console.print(Panel(f"[bold green]✨ Journal Suggestions:[/bold green]\n\n{ai_response}", title="Writing Prompts", border_style="green"))
-        
     except Exception as e:
         console.print(Panel.fit(f"[red]Suggestion generation failed: {str(e)}[/red]", title="Error", border_style="red"))
 
@@ -394,14 +442,7 @@ def ai_menu():
         elif choice == "journal":
             journal_ai_menu()
         elif choice == "config":
-            config = load_config()
-            if config.get('gemini_api_key'):
-                if Prompt.ask("[bold yellow]Reset API key? (y/n)[/bold yellow]", choices=["y", "n"], default="n") == "y":
-                    config.pop('gemini_api_key', None)
-                    save_config(config)
-                    console.print(Panel.fit("[green]API key reset. You'll be prompted to enter it again.[/green]", border_style="green"))
-            else:
-                console.print(Panel.fit("[yellow]No API key configured yet.[/yellow]", border_style="yellow"))
+            config_menu()
         elif choice == "back":
             break
 
@@ -593,29 +634,84 @@ def config_menu():
     console.print(Panel("[bold cyan]⚙️ Configuration Menu[/bold cyan]", border_style="cyan"))
     while True:
         choice = Prompt.ask(
-            "[bold cyan]Config Options: api, file, reset, view, back[/bold cyan]", 
-            choices=["api", "file", "reset", "view", "back"], 
-            default="api"
+            "[bold cyan]Config Options: provider, api, model, file, reset, view, back[/bold cyan]", 
+            choices=["provider", "api", "model", "file", "reset", "view", "back"], 
+            default="provider"
         )
         
-        if choice == "api":
-            console.print(Panel("[bold yellow]Setting up Gemini AI API Key[/bold yellow]", border_style="yellow"))
-            console.print("[cyan]Get your API key from: https://makersuite.google.com/app/apikey[/cyan]")
-            console.print("[dim]Tip: Use Ctrl+V to paste your API key[/dim]")
-            use_password = Prompt.ask("[bold cyan]Hide API key while typing? (y/n)[/bold cyan]", choices=["y", "n"], default="n")
-            if use_password == "y":
-                console.print("[dim]Note: Password mode may not allow pasting in some terminals[/dim]")
-                api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
+        if choice == "provider":
+            config = load_config()
+            current_provider = config.get('api_provider', 'gemini')
+            console.print(f"Current AI Provider: [bold green]{current_provider}[/bold green]")
+            provider = Prompt.ask(
+                "[bold cyan]Select AI Provider (gemini, openrouter)[/bold cyan]",
+                choices=["gemini", "openrouter"],
+                default=current_provider
+            )
+            config['api_provider'] = provider
+            save_config(config)
+            console.print(Panel.fit(f"[green]AI Provider set to {provider}![/green]", title="Success", border_style="green"))
+            
+        elif choice == "api":
+            config = load_config()
+            provider = config.get('api_provider', 'gemini')
+            if provider == "gemini":
+                console.print(Panel("[bold yellow]Setting up Gemini AI API Key[/bold yellow]", border_style="yellow"))
+                console.print("[cyan]Get your API key from: https://makersuite.google.com/app/apikey[/cyan]")
+                console.print("[dim]Tip: Use Ctrl+V to paste your API key[/dim]")
+                use_password = Prompt.ask("[bold cyan]Hide API key while typing? (y/n)[/bold cyan]", choices=["y", "n"], default="n")
+                if use_password == "y":
+                    console.print("[dim]Note: Password mode may not allow pasting in some terminals[/dim]")
+                    api_key = Prompt.ask("[bold cyan]Enter your Gemini API key[/bold cyan]", password=True)
+                else:
+                    api_key = Prompt.ask("[bold cyan]Enter your Gemini API key (paste with Ctrl+V)[/bold cyan]")
+                if api_key and api_key.strip():
+                    config['gemini_api_key'] = api_key.strip()
+                    save_config(config)
+                    console.print(Panel.fit("[green]Gemini API key saved successfully![/green]", title="Success", border_style="green"))
+                else:
+                    console.print(Panel.fit("[red]No API key entered[/red]", border_style="red"))
             else:
-                api_key = Prompt.ask("[bold cyan]Enter your Gemini API key (paste with Ctrl+V)[/bold cyan]")
-            if api_key and api_key.strip():
-                config = load_config()
-                config['gemini_api_key'] = api_key.strip()
-                save_config(config)
-                console.print(Panel.fit("[green]API key saved successfully![/green]", title="Success", border_style="green"))
+                console.print(Panel("[bold yellow]Setting up OpenRouter API Key[/bold yellow]", border_style="yellow"))
+                console.print("[cyan]Get your API key from: https://openrouter.ai/keys[/cyan]")
+                console.print("[dim]Tip: Use Ctrl+V to paste your API key[/dim]")
+                use_password = Prompt.ask("[bold cyan]Hide API key while typing? (y/n)[/bold cyan]", choices=["y", "n"], default="n")
+                if use_password == "y":
+                    console.print("[dim]Note: Password mode may not allow pasting in some terminals[/dim]")
+                    api_key = Prompt.ask("[bold cyan]Enter your OpenRouter API key[/bold cyan]", password=True)
+                else:
+                    api_key = Prompt.ask("[bold cyan]Enter your OpenRouter API key (paste with Ctrl+V)[/bold cyan]")
+                if api_key and api_key.strip():
+                    config['openrouter_api_key'] = api_key.strip()
+                    save_config(config)
+                    console.print(Panel.fit("[green]OpenRouter API key saved successfully![/green]", title="Success", border_style="green"))
+                else:
+                    console.print(Panel.fit("[red]No API key entered[/red]", border_style="red"))
+                    
+        elif choice == "model":
+            config = load_config()
+            provider = config.get('api_provider', 'gemini')
+            if provider == "gemini":
+                console.print(Panel("[yellow]Gemini provider uses default model gemini-3.5-flash (configured in code).[/yellow]", border_style="yellow"))
             else:
-                console.print(Panel.fit("[red]No API key entered[/red]", border_style="red"))
+                current_model = config.get('openrouter_model', 'anthropic/claude-sonnet-4')
+                console.print(f"Current OpenRouter Model: [bold green]{current_model}[/bold green]")
+                console.print("[cyan]Common models: anthropic/claude-sonnet-4, anthropic/claude-sonnet-4.5, anthropic/claude-sonnet-4.6, ~anthropic/claude-sonnet-latest, custom[/cyan]")
+                model_choice = Prompt.ask(
+                    "[bold cyan]Select OpenRouter Model[/bold cyan]",
+                    choices=["anthropic/claude-sonnet-4", "anthropic/claude-sonnet-4.5", "anthropic/claude-sonnet-4.6", "~anthropic/claude-sonnet-latest", "custom"],
+                    default="anthropic/claude-sonnet-4"
+                )
+                if model_choice == "custom":
+                    model_choice = Prompt.ask("[bold cyan]Enter custom OpenRouter model name (e.g. open-or-close/model-name)[/bold cyan]")
+                if model_choice and model_choice.strip():
+                    config['openrouter_model'] = model_choice.strip()
+                    save_config(config)
+                    console.print(Panel.fit(f"[green]OpenRouter model set to {model_choice}![/green]", title="Success", border_style="green"))
+                    
         elif choice == "file":
+            config = load_config()
+            provider = config.get('api_provider', 'gemini')
             console.print(Panel("[bold yellow]Load API Key from File[/bold yellow]", border_style="yellow"))
             console.print("[cyan]1. Create a text file named 'api_key.txt' in this directory[/cyan]")
             console.print("[cyan]2. Paste your API key into that file and save it[/cyan]")
@@ -628,34 +724,55 @@ def config_menu():
                     with open(api_key_file, 'r', encoding='utf-8') as f:
                         api_key = f.read().strip()
                     if api_key:
-                        config = load_config()
-                        config['gemini_api_key'] = api_key
+                        if provider == "gemini":
+                            config['gemini_api_key'] = api_key
+                            key_type = "Gemini"
+                        else:
+                            config['openrouter_api_key'] = api_key
+                            key_type = "OpenRouter"
                         save_config(config)
                         # Delete the file for security
                         os.remove(api_key_file)
-                        console.print(Panel.fit("[green]API key loaded and file deleted for security![/green]", title="Success", border_style="green"))
+                        console.print(Panel.fit(f"[green]{key_type} API key loaded and file deleted for security![/green]", title="Success", border_style="green"))
                     else:
                         console.print(Panel.fit("[red]API key file is empty[/red]", border_style="red"))
                 except Exception as e:
                     console.print(Panel.fit(f"[red]Error reading file: {str(e)}[/red]", border_style="red"))
             else:
                 console.print(Panel.fit("[red]File 'api_key.txt' not found[/red]", border_style="red"))
+                
         elif choice == "reset":
             config = load_config()
-            if config.get('gemini_api_key'):
-                if Prompt.ask("[bold yellow]Reset API key? (y/n)[/bold yellow]", choices=["y", "n"], default="n") == "y":
-                    config.pop('gemini_api_key', None)
+            provider = config.get('api_provider', 'gemini')
+            key_name = 'gemini_api_key' if provider == 'gemini' else 'openrouter_api_key'
+            provider_display = 'Gemini' if provider == 'gemini' else 'OpenRouter'
+            
+            if config.get(key_name):
+                if Prompt.ask(f"[bold yellow]Reset {provider_display} API key? (y/n)[/bold yellow]", choices=["y", "n"], default="n") == "y":
+                    config.pop(key_name, None)
                     save_config(config)
-                    console.print(Panel.fit("[green]API key reset successfully![/green]", border_style="green"))
+                    console.print(Panel.fit(f"[green]{provider_display} API key reset successfully![/green]", border_style="green"))
             else:
-                console.print(Panel.fit("[yellow]No API key configured yet.[/yellow]", border_style="yellow"))
+                console.print(Panel.fit(f"[yellow]No {provider_display} API key configured yet.[/yellow]", border_style="yellow"))
+                
         elif choice == "view":
             config = load_config()
-            if config.get('gemini_api_key'):
-                masked_key = config['gemini_api_key'][:8] + "..." + config['gemini_api_key'][-4:] if len(config['gemini_api_key']) > 12 else "***"
-                console.print(Panel.fit(f"[green]API Key: {masked_key}[/green]", title="Current Configuration", border_style="green"))
-            else:
-                console.print(Panel.fit("[yellow]No API key configured[/yellow]", title="Current Configuration", border_style="yellow"))
+            provider = config.get('api_provider', 'gemini')
+            
+            env_key_name = 'GEMINI_API_KEY' if provider == 'gemini' else 'OPENROUTER_API_KEY'
+            key_name = 'gemini_api_key' if provider == 'gemini' else 'openrouter_api_key'
+            key_val = os.getenv(env_key_name) or config.get(key_name)
+            env_indicator = " (from env)" if os.getenv(env_key_name) else ""
+            masked_key = key_val[:8] + "..." + key_val[-4:] + env_indicator if key_val and len(key_val) > 12 else ("***" + env_indicator if key_val else "Not configured")
+            
+            model_display = "gemini-3.5-flash (default)" if provider == "gemini" else config.get('openrouter_model', 'anthropic/claude-sonnet-4')
+            
+            info_panel = f"[cyan]Provider:[/cyan] [green]{provider}[/green]\n" \
+                         f"[cyan]Active Model:[/cyan] [green]{model_display}[/green]\n" \
+                         f"[cyan]API Key:[/cyan] [green]{masked_key}[/green]"
+            
+            console.print(Panel.fit(info_panel, title="Current Configuration", border_style="green"))
+            
         elif choice == "back":
             break
 
