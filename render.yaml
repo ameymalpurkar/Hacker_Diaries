@@ -1,10 +1,9 @@
 services:
-  - type: worker
+  - type: web
     name: hacker-diaries-cli
     env: docker
-    region: oregon # Or your preferred region
-    plan: free # Can upgrade to standard if required
-    dockerCommand: "tail -f /dev/null"
+    region: oregon
+    plan: free
     envVars:
       # These keys will be configured securely in the Render dashboard
       - key: GEMINI_API_KEY

@@ -3,6 +3,7 @@ FROM python:3.11-slim
 # Set critical environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONUTF8=1
+ENV PORT=10000
 
 # Create and set working directory
 WORKDIR /app
@@ -11,9 +12,9 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy all application files (Make sure .gitignore rules are respected)
+# Copy all application files
 COPY . .
 
-# Start a background sleep process to keep the container alive indefinitely.
-# This allows you to SSH/Shell into the Render container and run `python journal_cli.py secret`
-CMD ["tail", "-f", "/dev/null"]
+# Start a dummy HTTP server on the required PORT to satisfy Render's Web Service health check.
+# This keeps the container alive for free. You can then use the Render Shell to run your CLI.
+CMD python -m http.server $PORT
